@@ -1,0 +1,32 @@
+[
+  {
+    "keywords": ["grama", "planta", "vegetação", "ilha"],
+    "title": "Gramíneas",
+    "excerpt": "Plantas herbáceas com caule oco e nós; em ilhas costeiras, a composição depende de sal, vento e solo."
+  },
+  {
+    "keywords": ["pedra", "rocha", "penhasco", "areia"],
+    "title": "Rocha",
+    "excerpt": "Rochas retêm calor e alteram a umidade do solo ao redor, criando microclimas favoráveis a algumas plantas."
+  },
+  {
+    "keywords": ["microclima", "clima", "calor"],
+    "title": "Microclima",
+    "excerpt": "Variações locais de temperatura e umidade em escalas de metros, por exemplo perto de pedras ou sombra de árvores."
+  },
+  {
+    "keywords": ["árvore", "pinheiro", "arvore", "floresta"],
+    "title": "Árvore",
+    "excerpt": "Estrutura lenhosa que modifica vento, sombra e habitat para outros seres num pedaço de terra."
+  },
+  {
+    "keywords": ["mar", "água", "oceano", "ilha"],
+    "title": "Ilha",
+    "excerpt": "Território cercado de água; ecossistemas costeiros mudam rápido entre zona úmida e exposição ao sol."
+  },
+  {
+    "keywords": ["coelho", "animal", "mamífero"],
+    "title": "Coelho",
+    "excerpt": "Lagomorfo herbívoro; no nosso caso, um curioso que observa o mundo antes de explicar."
+  }
+]

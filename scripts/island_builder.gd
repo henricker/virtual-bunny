@@ -118,6 +118,10 @@ func _build_props() -> void:
 	surface.position = Vector3(0, 1.4, 0.06)
 	board.add_child(surface)
 	board.position = Vector3(-3.5, 0, 3)
+	var sketches := Node3D.new()
+	sketches.name = "BoardSketches"
+	sketches.set_script(load("res://scripts/board_sketches.gd"))
+	board.add_child(sketches)
 	add_child(board)
 	PerceptionRegistry.register("cork_board", "quadro de cortiça", board.global_position, board)
 
