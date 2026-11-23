@@ -8,73 +8,112 @@ Visual reference: [@or1cinho](https://www.instagram.com/or1cinho/).
 
 - **Godot 4.3+** (editor recommended)
 - Ubuntu / Linux (headless tested with the official binary)
-- Optional: [Ollama](https://ollama.com/) with `llama3.2:1b`
+- Optional: [Ollama](https://ollama.com/) with `llama3.2:1b` (wander + ritual captions)
+- Optional: [Wikimedia Enterprise](https://enterprise.wikimedia.com/docs/) token for CRT research (`ptwiki`)
 
-## Run
+## Quick start
 
 ```bash
 git clone https://github.com/henricker/virtual-bunny.git
 cd virtual-bunny
-godot4 --path .   # or open project.godot in the editor and press F5
+cp brain.env.example brain.env   # then edit (see below)
+godot4 --path .                    # or open project.godot and press F5
 ```
 
-With Ollama (optional):
+Godot **does not** read your shell environment unless you launch from a terminal with `export …` or use **`brain.env`** in the project root (loaded by autoloads).
+
+### `brain.env` (recommended)
+
+```bash
+cp brain.env.example brain.env
+```
+
+| Variable | Purpose |
+|----------|---------|
+| `BRAIN_API_URL` | Ollama base URL (default `http://127.0.0.1:11434`) |
+| `BRAIN_MODEL` | Model name from `ollama list` (e.g. `llama3.2:1b`) |
+| `WIKIMEDIA_ENTERPRISE_TOKEN` | Bearer JWT from Enterprise dashboard (~24h). **Never commit.** |
+| `WIKIMEDIA_ENTERPRISE_PROJECT` | Wiki edition filter (default `ptwiki`) |
+
+**Ollama**
 
 ```bash
 ollama pull llama3.2:1b
 ollama serve
-cp brain.env.example brain.env   # edit BRAIN_MODEL to match: ollama list
 ```
 
-Or launch from a terminal:
+**Output panel**
 
-```bash
-export BRAIN_API_URL=http://127.0.0.1:11434
-export BRAIN_MODEL=llama3.2:1b
-godot4 --path .
-```
-
-Check the Godot **Output** panel: `[BrainClient] usando Ollama` = live LLM; `usando MOCK` = offline fallback.
+- `[BrainClient] usando Ollama model=…` — live LLM
+- `[BrainClient] usando MOCK` — `brain/mock_responses.json`
+- `[WikiLookup] sem token Enterprise` — research uses `brain/wiki_snippets.json`
 
 Without Ollama, wander lines and rituals use **`brain/mock_responses.json`**.
 
 ## Wikipedia (Wikimedia Enterprise)
 
-Research at the CRT uses the [Wikimedia Enterprise On-demand API](https://enterprise.wikimedia.com/docs/) (`ptwiki` by default). The game does **not** embed your token in the repo.
+At the CRT, `BrainClient.research_thought()` calls `WikiLookup.search_async()`:
 
-1. Copy `brain.env.example` → `brain.env` (already used for Ollama).
-2. Set **`WIKIMEDIA_ENTERPRISE_TOKEN`** from the Enterprise dashboard (Bearer JWT, ~24h).
-3. Optional: **`WIKIMEDIA_ENTERPRISE_PROJECT=ptwiki`**.
+1. If **`WIKIMEDIA_ENTERPRISE_TOKEN`** is set → **On-demand API**  
+   `POST https://api.enterprise.wikimedia.com/v2/articles/{Título}` with filter `ptwiki`
+2. Else → local **`brain/wiki_snippets.json`**
 
-Without a token, `WikiLookup` falls back to **`brain/wiki_snippets.json`**. The API needs an **exact article title** — the rabbit maps keywords from its question (e.g. grama → `Grama`); you can extend the map in `scripts/wiki_lookup.gd`.
+The On-demand API needs an **exact article title** (not full-text search). The rabbit maps keywords from its question (e.g. grama → `Grama`, pedra → `Rocha`). Extend **`_candidate_titles()`** in `scripts/wiki_lookup.gd` for better hits.
 
-## FSM loop
+UI **Pesquisas** lists query, excerpt, source (`wikimedia-enterprise` or `offline-wiki`), and article URL when available.
 
-`idle` → `perceive` → `derive` → (if `needs_web_search`) `walk_to_pc` → `research` → `update_graph` → `sketch_on_board` → `idle`
+## Game loop (FSM)
 
-## Perception
+Wander on the island → periodic **ritual**: derive thought → walk to PC → **research** → update **graph** → **sketch** on cork board.
 
-Scene objects are registered in the `PerceptionRegistry` autoload (`id`, `label`, 3D position). See `scripts/island_builder.gd`.
+Rough states: `idle` → `perceive` → `derive` → `walk_to_pc` → `research` → `update_graph` → `sketch_on_board` → `idle`
 
-## Brain (stub)
+## Autoloads
 
-- Environment variable: **`BRAIN_API_URL`** (default `http://127.0.0.1:11434`)
-- Client: `scripts/brain_client.gd` — Ollama `/api/chat` and `/api/tags`
-- Fallback: `brain/mock_responses.json`
+| Name | Role |
+|------|------|
+| `BrainClient` | Ollama chat, quick thoughts, research + sketch captions |
+| `WikiLookup` | Enterprise API + offline snippets |
+| `ResearchLog` | History for **Pesquisas** panel |
+| `SketchArchive` | Sketches for **Desenhos** panel |
+| `PerceptionRegistry` | Island objects (`id`, label, 3D position) |
 
-## Layout
+## UI
+
+- **Pensamentos** — live thought line
+- **Grafo** — node overlay from perception + research
+- **Pesquisas** — research log (Enterprise or offline)
+- **Desenhos** — procedural sketches from the ritual
+
+## Project layout
 
 ```
 project.godot
-scenes/main.tscn
+brain.env.example          # template (copy → brain.env, gitignored)
+brain/
+  mock_responses.json      # no Ollama
+  wiki_snippets.json       # no Enterprise token
+scenes/
+  main.tscn
+  thoughts_panel.tscn
+  research_panel.tscn
+  sketch_gallery_panel.tscn
 scripts/
   rabbit_fsm.gd
+  rabbit_avatar.gd
   island_builder.gd
   brain_client.gd
+  wiki_lookup.gd
+  research_log.gd
+  sketch_generator.gd
+  sketch_archive.gd
+  board_sketches.gd
   perception_registry.gd
-  ui/graph_ui.gd
-  ui/thoughts_ui.gd
-brain/mock_responses.json
+  ui/
+    thoughts_ui.gd
+    graph_ui.gd
+    research_panel.gd
+    sketch_gallery.gd
 ```
 
 ## Headless screenshot (optional)
