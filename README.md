@@ -9,7 +9,7 @@ Visual reference: [@or1cinho](https://www.instagram.com/or1cinho/).
 - **Godot 4.3+** (editor recommended)
 - Ubuntu / Linux (headless tested with the official binary)
 - Optional: [Ollama](https://ollama.com/) with `llama3.2:1b` (wander + ritual captions)
-- Optional: [Wikimedia Enterprise](https://enterprise.wikimedia.com/docs/) token for CRT research (`ptwiki`)
+- Optional: [Brave Search API](https://brave.com/search/api/) for real web search
 
 ## Quick start
 
@@ -32,8 +32,13 @@ cp brain.env.example brain.env
 |----------|---------|
 | `BRAIN_API_URL` | Ollama base URL (default `http://127.0.0.1:11434`) |
 | `BRAIN_MODEL` | Model name from `ollama list` (e.g. `llama3.2:1b`) |
-| `WIKIMEDIA_ENTERPRISE_TOKEN` | Bearer JWT from Enterprise dashboard (~24h). **Never commit.** |
-| `WIKIMEDIA_ENTERPRISE_PROJECT` | Wiki edition filter (default `ptwiki`) |
+| `BRAVE_SEARCH_API_KEY` | Web search at the CRT (**primary**). **Never commit.** |
+| `BRAVE_SEARCH_COUNT` | Number of SERP hits (default `5`) |
+| `BRAVE_FETCH_TOP_PAGE` | `true` = GET first URL and strip HTML (slower) |
+| `RESEARCH_URL_ALLOWLIST` | Optional comma domains; empty = any `https` |
+| `RITUAL_STOPS_REFLECT` | Walk stops between reflection rituals (default `5`) |
+| `RESEARCH_MIN_INTERVAL_SEC` | Min seconds between Brave searches (default `1200` / 20 min) |
+| `RESEARCH_SEARCH_CHANCE` | Odds of searching when doubt is novel (default `0.3`) |
 
 **Ollama**
 
@@ -46,21 +51,23 @@ ollama serve
 
 - `[BrainClient] usando Ollama model=…` — live LLM
 - `[BrainClient] usando MOCK` — `brain/mock_responses.json`
-- `[WikiLookup] sem token Enterprise` — research uses `brain/wiki_snippets.json`
+- `[Research] Brave → https://…` — live web search
+- `[Research] sem Brave` — local `brain/wiki_snippets.json`
 
 Without Ollama, wander lines and rituals use **`brain/mock_responses.json`**.
 
-## Wikipedia (Wikimedia Enterprise)
+## Research (Brave + offline)
 
 At the CRT, `BrainClient.research_thought()` calls `WikiLookup.search_async()`:
 
-1. If **`WIKIMEDIA_ENTERPRISE_TOKEN`** is set → **On-demand API**  
-   `POST https://api.enterprise.wikimedia.com/v2/articles/{Título}` with filter `ptwiki`
-2. Else → local **`brain/wiki_snippets.json`**
+1. **`BRAVE_SEARCH_API_KEY`** → Brave Web Search (`pt-br`, `BR`)
+2. Else **`brain/wiki_snippets.json`** (local sample text, no HTTP)
 
-The On-demand API needs an **exact article title** (not full-text search). The rabbit maps keywords from its question (e.g. grama → `Grama`, pedra → `Rocha`). Extend **`_candidate_titles()`** in `scripts/wiki_lookup.gd` for better hits.
+The rabbit **reflects** most rituals and only searches when the doubt is **new** (see `rabbit_fsm.gd` + `RESEARCH_MIN_INTERVAL_SEC`).
 
-UI **Pesquisas** lists query, excerpt, source (`wikimedia-enterprise` or `offline-wiki`), and article URL when available.
+Optional **`BRAVE_FETCH_TOP_PAGE=true`** fetches the top hit HTML and strips text for Ollama.
+
+UI **Pesquisas** shows excerpt, source (`brave-search` or `offline-snippets`), URLs, and SERP list when Brave returned multiple hits.
 
 ## Game loop (FSM)
 
@@ -73,7 +80,7 @@ Rough states: `idle` → `perceive` → `derive` → `walk_to_pc` → `research`
 | Name | Role |
 |------|------|
 | `BrainClient` | Ollama chat, quick thoughts, research + sketch captions |
-| `WikiLookup` | Enterprise API + offline snippets |
+| `WikiLookup` | Brave Search + offline snippets |
 | `ResearchLog` | History for **Pesquisas** panel |
 | `SketchArchive` | Sketches for **Desenhos** panel |
 | `PerceptionRegistry` | Island objects (`id`, label, 3D position) |
@@ -82,7 +89,7 @@ Rough states: `idle` → `perceive` → `derive` → `walk_to_pc` → `research`
 
 - **Pensamentos** — live thought line
 - **Grafo** — node overlay from perception + research
-- **Pesquisas** — research log (Enterprise or offline)
+- **Pesquisas** — research log (web or offline)
 - **Desenhos** — procedural sketches from the ritual
 
 ## Project layout
@@ -92,7 +99,7 @@ project.godot
 brain.env.example          # template (copy → brain.env, gitignored)
 brain/
   mock_responses.json      # no Ollama
-  wiki_snippets.json       # no Enterprise token
+  wiki_snippets.json       # no Brave key
 scenes/
   main.tscn
   thoughts_panel.tscn

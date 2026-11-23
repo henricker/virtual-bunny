@@ -26,8 +26,8 @@ func _refresh() -> void:
 	else:
 		_body.text = (
 			"[i]Nenhuma pesquisa ainda.[/i]\n\n"
-			+ "Configure [b]WIKIMEDIA_ENTERPRISE_TOKEN[/b] em brain.env (token 24h do dashboard). "
-			+ "Sem token, usa fallback [b]wiki_snippets.json[/b]."
+			+ "Coloque [b]BRAVE_SEARCH_API_KEY[/b] em brain.env (https://brave.com/search/api/). "
+			+ "Sem chave Brave, usa trechos locais [b]wiki_snippets.json[/b]."
 		)
 
 
@@ -37,9 +37,19 @@ func _on_item_selected(idx: int) -> void:
 		return
 	var entry: Dictionary = all[idx]
 	var url := str(entry.get("url", ""))
-	var link := ("\n\n%s" % url) if not url.is_empty() else ""
+	var link := ("\n\n[url=%s]%s[/url]" % [url, url]) if not url.is_empty() else ""
+	var serp := ""
+	var results: Variant = entry.get("results", [])
+	if typeof(results) == TYPE_ARRAY and results.size() > 1:
+		var lines: PackedStringArray = ["\n\n[b]Resultados (navegador):[/b]"]
+		for r: Variant in results:
+			if typeof(r) != TYPE_DICTIONARY:
+				continue
+			var ru := str(r.get("url", ""))
+			lines.append("• [url=%s]%s[/url] — %s" % [ru, r.get("title", ""), r.get("snippet", "")])
+		serp = "\n".join(lines)
 	_body.text = (
-		"[b]%s[/b]\nPergunta: %s\n\n%s\n\n[i]Fonte: %s (%s)[/i]%s"
+		"[b]%s[/b]\nPergunta: %s\n\n%s\n\n[i]Fonte: %s (%s)[/i]%s%s"
 		% [
 			entry.get("title", ""),
 			entry.get("query", ""),
@@ -47,5 +57,6 @@ func _on_item_selected(idx: int) -> void:
 			entry.get("source", ""),
 			entry.get("time", ""),
 			link,
+			serp,
 		]
 	)

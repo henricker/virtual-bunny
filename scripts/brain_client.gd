@@ -175,39 +175,105 @@ func think_at_scene(_scene: Array, focus_label: String) -> String:
 	return reply
 
 
+func min_search_interval_sec() -> float:
+	var raw := str(_file_env.get("RESEARCH_MIN_INTERVAL_SEC", ""))
+	if raw.is_empty():
+		raw = OS.get_environment("RESEARCH_MIN_INTERVAL_SEC")
+	if raw.is_empty() or not raw.is_valid_float():
+		return 1200.0
+	return maxf(60.0, float(raw))
+
+
+func research_search_chance() -> float:
+	var raw := str(_file_env.get("RESEARCH_SEARCH_CHANCE", ""))
+	if raw.is_empty():
+		raw = OS.get_environment("RESEARCH_SEARCH_CHANCE")
+	if raw.is_empty() or not raw.is_valid_float():
+		return 0.3
+	return clampf(float(raw), 0.05, 1.0)
+
+
 func derive_thought(scene: Array, nodes: Array, edges: Array) -> Dictionary:
 	await wait_ready()
 	if _use_mock:
-		return mock_derive()
+		var d: Dictionary = mock_derive().duplicate(true)
+		# Com histórico, mock reflete mais do que pergunta de novo.
+		if ResearchLog.search_count() >= 1 and randf() > 0.35:
+			d["needs_web_search"] = false
+			d["monologue"] = _mock_reflect_line()
+		return d
+	var prior := ResearchLog.get_reflect_context(3)
 	var scene_blob: String = JSON.stringify({"scene": scene, "nodes": nodes.size()})
-	var prompt := "Coelho curioso. Cena: %s. Uma frase em PT-BR com uma pergunta simples sobre natureza." % scene_blob
+	var prompt := (
+		"Coelho numa ilha. Cena: %s\n"
+		+ "O que já leu:\n%s\n"
+		+ "Responda UMA frase curta PT-BR: prefira refletir ligando o que já sabe ao que vê. "
+		+ "Só faça pergunta nova se for dúvida bem diferente do que já leu."
+		% [scene_blob, prior]
+	)
 	var reply := _sanitize(await _chat(prompt))
-	var fallback: String = "Fico com uma pergunta na cabeça…"
+	var fallback: String = "Fico remoendo o que já li…"
 	if reply.is_empty():
 		reply = fallback
+	var has_question := "?" in reply
 	return {
 		"monologue": reply,
-		"needs_web_search": true,
+		"needs_web_search": has_question,
 		"nodes": mock_derive().get("nodes", []),
 		"edges": mock_derive().get("edges", []),
 	}
 
 
+func reflect_thought(focus_label: String, prior_context: String) -> Dictionary:
+	await wait_ready()
+	if _use_mock:
+		return {
+			"monologue": _mock_reflect_line(),
+			"nodes": [],
+			"edges": [],
+		}
+	var prompt := (
+		"Coelho pensativo perto de '%s'. Sem internet.\n"
+		+ "Notas de leituras anteriores:\n%s\n"
+		+ "Uma frase curta PT-BR: amadurecer ideia, comparar, lembrar — sem pedir pesquisa nova."
+		% [focus_label, prior_context]
+	)
+	var reply := _sanitize(await _chat(prompt))
+	if reply.is_empty():
+		reply = "Isso combina com o que eu tinha lido antes…"
+	return {"monologue": reply, "nodes": [], "edges": []}
+
+
+func _mock_reflect_line() -> String:
+	var lines := [
+		"O que li no CRT ainda faz sentido perto da grama.",
+		"Não preciso pesquisar de novo; só deixar a ideia descansar.",
+		"Microclima… já tinha anotado isso. Agora é olhar o vento.",
+		"Penso na pedra e no que a página disse ontem.",
+		"Hmm. A resposta já está no quadro, só não encaixei ainda.",
+	]
+	return lines[randi() % lines.size()]
+
+
 func research_thought(question: String) -> Dictionary:
 	await wait_ready()
 	var hit: Dictionary = await WikiLookup.search_async(question)
+	var serp: Variant = hit.get("results", [])
+	if typeof(serp) != TYPE_ARRAY:
+		serp = []
 	ResearchLog.add_entry(
 		question,
 		str(hit.get("title", "")),
 		str(hit.get("excerpt", "")),
-		str(hit.get("source", "offline-wiki")),
-		str(hit.get("url", ""))
+		str(hit.get("source", "offline-snippets")),
+		str(hit.get("url", "")),
+		serp
 	)
 	var summary := str(hit.get("excerpt", ""))
 	if not _use_mock:
 		var prompt := (
 			"Reescreva em uma frase curta em português, como um coelho curioso, "
-			+ "baseado só neste texto da Wikipedia: %s"
+			+ "baseado só neste texto encontrado na web: %s"
 			% summary
 		)
 		var reply := _sanitize(await _chat(prompt))

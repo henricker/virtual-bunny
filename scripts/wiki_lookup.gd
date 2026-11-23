@@ -1,9 +1,10 @@
 extends Node
-## Wikipedia lookup: Wikimedia Enterprise On-demand API (ptwiki) + offline fallback.
+## Pesquisa na web: Brave Search API → trechos locais (offline).
 
-const API_BASE := "https://api.enterprise.wikimedia.com/v2"
+const BRAVE_SEARCH_URL := "https://api.search.brave.com/res/v1/web/search"
 const SNIPPETS_PATH := "res://brain/wiki_snippets.json"
-const DEFAULT_PROJECT := "ptwiki"
+const MAX_EXCERPT_CHARS := 1200
+const MAX_PAGE_CHARS := 4500
 
 var _snippets: Array = []
 var _http: HTTPRequest
@@ -12,7 +13,7 @@ var _file_env: Dictionary = {}
 
 func _ready() -> void:
 	_http = HTTPRequest.new()
-	_http.timeout = 8.0
+	_http.timeout = 12.0
 	add_child(_http)
 	_load_env_file()
 	_load_snippets()
@@ -41,26 +42,23 @@ func _load_snippets() -> void:
 
 
 func search(query: String) -> Dictionary:
-	# Sync fallback only (offline). Prefer search_async from game code.
 	return _search_offline(query)
 
 
 func search_async(query: String) -> Dictionary:
-	var token := _access_token()
-	if token.is_empty():
-		print("[WikiLookup] sem token Enterprise — usando wiki_snippets.json")
-		return _search_offline(query)
-	var titles := _candidate_titles(query)
-	for title in titles:
-		var hit := await _fetch_article(title, token)
+	var brave_key := _brave_api_key()
+	if not brave_key.is_empty():
+		var hit := await _search_brave(query, brave_key)
 		if not hit.is_empty():
 			return hit
-	push_warning("[WikiLookup] Enterprise sem match para: %s" % query)
+		push_warning("[Research] Brave sem resultado — fallback offline")
+	else:
+		print("[Research] sem Brave — usando snippets locais")
 	return _search_offline(query)
 
 
-func _access_token() -> String:
-	for key in ["WIKIMEDIA_ENTERPRISE_TOKEN", "ACCESS_TOKEN", "WME_ACCESS_TOKEN"]:
+func _brave_api_key() -> String:
+	for key in ["BRAVE_SEARCH_API_KEY", "BRAVE_API_KEY"]:
 		var from_file := str(_file_env.get(key, ""))
 		if not from_file.is_empty():
 			return from_file
@@ -70,79 +68,155 @@ func _access_token() -> String:
 	return ""
 
 
-func _wiki_project() -> String:
-	var p := str(_file_env.get("WIKIMEDIA_ENTERPRISE_PROJECT", ""))
-	if p.is_empty():
-		p = OS.get_environment("WIKIMEDIA_ENTERPRISE_PROJECT")
-	if p.is_empty():
-		p = DEFAULT_PROJECT
-	return p
+func _env_bool(key: String, default: bool) -> bool:
+	var raw := str(_file_env.get(key, "")).to_lower()
+	if raw.is_empty():
+		raw = OS.get_environment(key).to_lower()
+	if raw.is_empty():
+		return default
+	return raw in ["1", "true", "yes", "on"]
 
 
-func _candidate_titles(query: String) -> Array[String]:
-	var q := query.to_lower()
-	var out: Array[String] = []
-	var map := {
-		"grama": "Grama",
-		"pedra": "Rocha",
-		"penhasco": "Rocha",
-		"rocha": "Rocha",
-		"microclima": "Clima",
-		"clima": "Clima",
-		"árvore": "Árvore",
-		"arvore": "Árvore",
-		"pinheiro": "Pinheiro",
-		"ilha": "Ilha",
-		"coelho": "Coelho",
-		"planta": "Planta",
-		"natureza": "Natureza",
-	}
-	for key in map:
-		if key in q:
-			out.append(map[key])
-	for word in q.split(" ", false):
-		var w := word.strip_edges()
-		if w.length() > 4 and not out.has(w.capitalize()):
-			out.append(w.capitalize())
-	if out.is_empty():
-		out.append("Natureza")
-	return out
+func _brave_result_count() -> int:
+	var raw := str(_file_env.get("BRAVE_SEARCH_COUNT", ""))
+	if raw.is_empty():
+		raw = OS.get_environment("BRAVE_SEARCH_COUNT")
+	if raw.is_empty() or not raw.is_valid_int():
+		return 5
+	return clampi(int(raw), 1, 20)
 
 
-func _article_path_title(title: String) -> String:
-	return title.strip_edges().replace(" ", "_")
-
-
-func _fetch_article(title: String, token: String) -> Dictionary:
-	var path_title := _article_path_title(title)
-	var url := "%s/articles/%s" % [API_BASE, path_title.uri_encode()]
-	var body := {
-		"filters": [{"field": "is_part_of.identifier", "value": _wiki_project()}],
-		"fields": ["name", "abstract", "url", "date_modified"],
-	}
-	var headers := [
-		"Authorization: Bearer %s" % token,
-		"Content-Type: application/json",
+func _search_brave(query: String, api_key: String) -> Dictionary:
+	var count := _brave_result_count()
+	var q := query.uri_encode()
+	var url := "%s?q=%s&count=%d&search_lang=pt-br&country=BR&text_decorations=0" % [
+		BRAVE_SEARCH_URL, q, count,
 	]
-	var err := _http.request(url, headers, HTTPClient.METHOD_POST, JSON.stringify(body))
+	var headers := [
+		"Accept: application/json",
+		"X-Subscription-Token: %s" % api_key,
+	]
+	var err := _http.request(url, headers, HTTPClient.METHOD_GET)
 	if err != OK:
 		return {}
 	var args: Array = await _http.request_completed
 	if args[0] != HTTPRequest.RESULT_SUCCESS or args[1] != 200:
+		push_warning("[Research] Brave HTTP %s" % str(args[1]))
 		return {}
-	var parsed: Variant = JSON.parse_string(args[3].get_string_from_utf8())
-	if typeof(parsed) != TYPE_ARRAY or parsed.is_empty():
+	var root: Variant = JSON.parse_string(args[3].get_string_from_utf8())
+	if typeof(root) != TYPE_DICTIONARY:
 		return {}
-	var article: Dictionary = parsed[0]
-	var abstract := str(article.get("abstract", ""))
-	if abstract.is_empty():
+	var web: Variant = root.get("web", {})
+	if typeof(web) != TYPE_DICTIONARY:
 		return {}
+	var results: Variant = web.get("results", [])
+	if typeof(results) != TYPE_ARRAY or results.is_empty():
+		return {}
+	var serp: Array[Dictionary] = []
+	for item: Variant in results:
+		if typeof(item) != TYPE_DICTIONARY:
+			continue
+		var u := str(item.get("url", ""))
+		if u.is_empty() or not _url_allowed(u):
+			continue
+		serp.append({
+			"title": str(item.get("title", "")),
+			"url": u,
+			"snippet": str(item.get("description", "")),
+		})
+	if serp.is_empty():
+		return {}
+	var top: Dictionary = serp[0]
+	var excerpt := str(top.get("snippet", ""))
+	if _env_bool("BRAVE_FETCH_TOP_PAGE", false):
+		var body := await _fetch_page_text(str(top.get("url", "")))
+		if not body.is_empty():
+			excerpt = body
+	elif excerpt.is_empty() and serp.size() > 1:
+		var parts: PackedStringArray = []
+		for i in mini(3, serp.size()):
+			parts.append("%s: %s" % [serp[i].get("title"), serp[i].get("snippet")])
+		excerpt = " ".join(parts)
+	excerpt = excerpt.substr(0, mini(excerpt.length(), MAX_EXCERPT_CHARS))
+	print("[Research] Brave → %s" % top.get("url", ""))
 	return {
-		"title": str(article.get("name", title)),
-		"excerpt": abstract.substr(0, mini(abstract.length(), 600)),
-		"url": str(article.get("url", "")),
-		"source": "wikimedia-enterprise",
+		"title": str(top.get("title", "Resultado")),
+		"excerpt": excerpt,
+		"url": str(top.get("url", "")),
+		"source": "brave-search",
+		"results": serp,
 	}
+
+
+func _allowlist_domains() -> Array[String]:
+	var raw := str(_file_env.get("RESEARCH_URL_ALLOWLIST", ""))
+	if raw.is_empty():
+		raw = OS.get_environment("RESEARCH_URL_ALLOWLIST")
+	if raw.is_empty():
+		return []
+	var out: Array[String] = []
+	for part in raw.split(",", false):
+		var d := part.strip_edges().to_lower()
+		if not d.is_empty():
+			out.append(d)
+	return out
+
+
+func _url_allowed(url: String) -> bool:
+	var list := _allowlist_domains()
+	if list.is_empty():
+		return url.begins_with("http://") or url.begins_with("https://")
+	var host := _host_from_url(url)
+	for dom in list:
+		if host == dom or host.ends_with("." + dom):
+			return true
+	return false
+
+
+func _host_from_url(url: String) -> String:
+	var u := url.strip_edges()
+	if not "://" in u:
+		return ""
+	var rest := u.split("://", true, 1)[1]
+	var host := rest.split("/", false)[0].split("?", false)[0].to_lower()
+	if host.begins_with("www."):
+		host = host.substr(4)
+	return host
+
+
+func _fetch_page_text(url: String) -> String:
+	if url.is_empty() or not _url_allowed(url):
+		return ""
+	var headers := ["User-Agent: CoelhoVirtual/1.0 (Godot research ritual)"]
+	var err := _http.request(url, headers, HTTPClient.METHOD_GET)
+	if err != OK:
+		return ""
+	var args: Array = await _http.request_completed
+	if args[0] != HTTPRequest.RESULT_SUCCESS or args[1] != 200:
+		return ""
+	var html := args[3].get_string_from_utf8()
+	return _html_to_plain(html)
+
+
+func _html_to_plain(html: String) -> String:
+	var text := html
+	for tag in ["script", "style", "nav", "footer", "header"]:
+		var open := "<%s" % tag
+		var close := "</%s>" % tag
+		while open in text.to_lower():
+			var start := text.to_lower().find(open)
+			var end_tag := text.to_lower().find(close, start)
+			if end_tag < 0:
+				break
+			text = text.substr(0, start) + text.substr(end_tag + close.length())
+	var re_tag := RegEx.new()
+	re_tag.compile("<[^>]+>")
+	text = re_tag.sub(text, " ", true)
+	text = text.replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+	text = text.replace("\t", " ")
+	while "  " in text:
+		text = text.replace("  ", " ")
+	return text.strip_edges().substr(0, mini(text.length(), MAX_PAGE_CHARS))
 
 
 func _search_offline(query: String) -> Dictionary:
@@ -166,5 +240,6 @@ func _search_offline(query: String) -> Dictionary:
 		"title": str(best.get("title", "Nota local")),
 		"excerpt": str(best.get("excerpt", "")),
 		"url": "",
-		"source": "offline-wiki",
+		"source": "offline-snippets",
+		"results": [],
 	}
