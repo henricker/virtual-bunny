@@ -294,8 +294,8 @@ func sketch_thought(graph_nodes: Array) -> Dictionary:
 	var caption := base_caption
 	if not _use_mock:
 		var prompt := (
-			"Coelho desenha no quadro sobre: %s. "
-			+ "UMA frase curta PT-BR (máx. 12 palavras)."
+			"Coelho rabisca no papel com caneta azul. Tema: %s. "
+			+ "UMA frase curta PT-BR (máx. 10 palavras). Inclua uma palavra-chave (grama, pedra, sol, coelho, água…)."
 			% base_caption
 		)
 		var reply := _sanitize(await _chat(prompt))

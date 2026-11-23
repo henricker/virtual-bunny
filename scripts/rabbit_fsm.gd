@@ -3,6 +3,8 @@ extends CharacterBody3D
 
 const WALK_SPEED := 2.5
 const ARRIVE_DIST := 0.35
+const FLOOR_Y := 0.55
+const STAND_OFF := 1.4
 const ISLAND_HALF_X := 7.5
 const ISLAND_HALF_Z := 6.0
 const DEFAULT_STOPS_REFLECT := 5
@@ -28,8 +30,11 @@ var _file_env: Dictionary = {}
 
 
 func _ready() -> void:
-	motion_mode = MOTION_MODE_FLOATING
+	motion_mode = MOTION_MODE_GROUNDED
 	floor_stop_on_slope = false
+	floor_constant_speed = true
+	collision_layer = 2
+	collision_mask = 1
 	_thoughts = get_node(thoughts_ui_path)
 	_graph = get_node(graph_ui_path)
 	_walk_target = get_node(walk_target_path)
@@ -71,8 +76,10 @@ func _physics_process(delta: float) -> void:
 		_is_walking = false
 		velocity = Vector3.ZERO
 		return
-	var step := minf(WALK_SPEED * delta, dist)
-	global_position += to.normalized() * step
+	velocity = to.normalized() * WALK_SPEED
+	velocity.y = 0.0
+	move_and_slide()
+	global_position.y = FLOOR_Y
 	var face := global_position + Vector3(to.x, 0.0, to.z)
 	if face.distance_squared_to(global_position) > 0.01:
 		look_at(face, Vector3.UP)
@@ -103,15 +110,14 @@ func _pick_destination() -> Vector3:
 		var pick: Dictionary = objects[_explore_index % objects.size()]
 		_explore_index += 1
 		var pos: Vector3 = pick["position"]
-		pos.y = global_position.y
-		return pos
+		return _approach_near(pos)
 	return _random_island_point()
 
 
 func _random_island_point() -> Vector3:
 	var x := randf_range(-ISLAND_HALF_X, ISLAND_HALF_X)
 	var z := randf_range(-ISLAND_HALF_Z, ISLAND_HALF_Z)
-	return Vector3(x, global_position.y, z)
+	return Vector3(x, FLOOR_Y, z)
 
 
 func _label_near(point: Vector3) -> String:
@@ -136,9 +142,21 @@ func _walk_line() -> String:
 	return lines[randi() % lines.size()]
 
 
+func _approach_near(world_pos: Vector3, stand_off: float = STAND_OFF) -> Vector3:
+	var center := Vector3(world_pos.x, FLOOR_Y, world_pos.z)
+	var here := Vector3(global_position.x, FLOOR_Y, global_position.z)
+	var dir := here - center
+	if dir.length_squared() < 0.25:
+		dir = Vector3(1.0, 0.0, 0.5)
+	dir = dir.normalized()
+	var point := center + dir * stand_off
+	point.x = clampf(point.x, -ISLAND_HALF_X, ISLAND_HALF_X)
+	point.z = clampf(point.z, -ISLAND_HALF_Z, ISLAND_HALF_Z)
+	return Vector3(point.x, FLOOR_Y, point.z)
+
+
 func _walk_to(position: Vector3) -> void:
-	_walk_goal = position
-	_walk_goal.y = global_position.y
+	_walk_goal = Vector3(position.x, FLOOR_Y, position.z)
 	_is_walking = true
 	while _is_walking:
 		await get_tree().physics_frame
@@ -187,32 +205,36 @@ func _ritual_reflect(focus: String) -> void:
 	await get_tree().create_timer(randf_range(0.6, 1.4)).timeout
 	# Esboço no mural sem pesquisa — consolida memória visual, sem Brave.
 	if _graph_nodes.size() >= 2 and randf() < 0.35:
+		await _walk_to(_approach_near(_board.global_position, 1.0))
+		_thoughts.show_thought("Vou rabiscar no quadro…")
 		var sketch: Dictionary = await BrainClient.sketch_thought(_graph_nodes)
 		_thoughts.show_thought(sketch.get("monologue", ""))
 		var tex: Texture2D = sketch.get("texture")
-		var cap: String = str(sketch.get("caption", ""))
 		if tex:
-			SketchArchive.add_sketch(cap, tex)
-		await _walk_to(_board.global_position + Vector3(0.9, 0.0, 0.6))
-		await get_tree().create_timer(0.8).timeout
+			SketchArchive.add_sketch(str(sketch.get("caption", "")), tex)
+			if _board.has_method("wait_for_draw_animation"):
+				await _board.wait_for_draw_animation()
+		await get_tree().create_timer(0.4).timeout
 
 
 func _ritual_search(question: String) -> void:
 	_thoughts.show_thought("Surgiu uma dúvida nova… vou até o CRT.")
-	await _walk_to(_walk_target.global_position)
+	await _walk_to(_approach_near(_walk_target.global_position, 0.9))
 	_thoughts.show_thought("Digitando na CRT…")
 	var research: Dictionary = await BrainClient.research_thought(question)
 	_thoughts.show_thought(research.get("monologue", ""))
 	_merge_graph(research)
 	await get_tree().create_timer(0.8).timeout
+	await _walk_to(_approach_near(_board.global_position, 1.0))
+	_thoughts.show_thought("Vou rabiscar no quadro…")
 	var sketch: Dictionary = await BrainClient.sketch_thought(_graph_nodes)
 	_thoughts.show_thought(sketch.get("monologue", ""))
 	var tex: Texture2D = sketch.get("texture")
-	var cap: String = str(sketch.get("caption", ""))
 	if tex:
-		SketchArchive.add_sketch(cap, tex)
-	await _walk_to(_board.global_position + Vector3(0.9, 0.0, 0.6))
-	await get_tree().create_timer(1.2).timeout
+		SketchArchive.add_sketch(str(sketch.get("caption", "")), tex)
+		if _board.has_method("wait_for_draw_animation"):
+			await _board.wait_for_draw_animation()
+	await get_tree().create_timer(0.5).timeout
 
 
 func _research_query(derive: Dictionary) -> String:

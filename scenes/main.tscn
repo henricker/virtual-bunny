@@ -1,6 +1,7 @@
-[gd_scene load_steps=9 format=3 uid="uid://cmaincoelho01"]
+[gd_scene load_steps=10 format=3 uid="uid://cmaincoelho01"]
 
 [ext_resource type="Script" path="res://scripts/island_builder.gd" id="1_island"]
+[ext_resource type="PackedScene" uid="uid://cthoughtbubble01" path="res://scenes/thought_bubble.tscn" id="8_bubble"]
 [ext_resource type="Script" path="res://scripts/rabbit_fsm.gd" id="2_fsm"]
 [ext_resource type="Script" path="res://scripts/rabbit_avatar.gd" id="3_avatar"]
 [ext_resource type="Script" path="res://scripts/ui/graph_ui.gd" id="4_graph"]
@@ -32,6 +33,8 @@ shadow_enabled = true
 script = ExtResource("1_island")
 
 [node name="Rabbit" type="CharacterBody3D" parent="."]
+collision_layer = 2
+collision_mask = 1
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.55, -1)
 script = ExtResource("2_fsm")
 thoughts_ui_path = NodePath("../UI/ThoughtsPanel")
@@ -44,6 +47,8 @@ shape = SubResource("CapsuleShape3D_rabbit")
 
 [node name="Avatar" type="Node3D" parent="Rabbit"]
 script = ExtResource("3_avatar")
+
+[node name="ThoughtBubble" parent="Rabbit" instance=ExtResource("8_bubble")]
 
 [node name="Camera3D" type="Camera3D" parent="."]
 transform = Transform3D(0.939693, -0.17101, 0.296198, 0, 0.866025, 0.5, -0.34202, -0.469846, 0.813798, 6, 5, 8)

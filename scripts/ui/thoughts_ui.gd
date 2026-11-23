@@ -1,19 +1,25 @@
 extends PanelContainer
 class_name ThoughtsUI
-## Rabbit thought captions (in-game PT-BR strings).
+## Encaminha pensamentos para o balão 3D acima do coelho.
 
-@onready var _label: Label = $Margin/Label
+@export var bubble_path: NodePath = NodePath("../../Rabbit/ThoughtBubble")
+
+var _bubble: Node = null
 
 
 func _ready() -> void:
-	_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_label.text = "…"
-	set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	offset_bottom = -12
-	offset_top = -120
-	offset_left = 24
-	offset_right = -24
+	visible = false
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if not bubble_path.is_empty() and has_node(bubble_path):
+		_bubble = get_node(bubble_path)
+	elif get_tree().has_group("rabbit_thought_bubble"):
+		var nodes := get_tree().get_nodes_in_group("rabbit_thought_bubble")
+		if not nodes.is_empty():
+			_bubble = nodes[0]
 
 
 func show_thought(text: String) -> void:
-	_label.text = text
+	if _bubble != null and _bubble.has_method("set_thought"):
+		_bubble.set_thought(text)
+		return
+	push_warning("[ThoughtsUI] ThoughtBubble não encontrado")
