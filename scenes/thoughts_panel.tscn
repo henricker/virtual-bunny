@@ -1,0 +1,28 @@
+[gd_scene load_steps=2 format=3 uid="uid://cthoughtpanel01"]
+
+[ext_resource type="Script" path="res://scripts/ui/thoughts_ui.gd" id="1_thoughts"]
+
+[node name="ThoughtsPanel" type="PanelContainer"]
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = -120.0
+offset_right = -24.0
+offset_bottom = -12.0
+grow_horizontal = 2
+grow_vertical = 0
+script = ExtResource("1_thoughts")
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 8
+
+[node name="Label" type="Label" parent="Margin"]
+layout_mode = 2
+text = "…"
+autowrap_mode = 3

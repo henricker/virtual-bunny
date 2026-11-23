@@ -1,0 +1,47 @@
+{
+  "perceive": {
+    "monologue": "Hum… só existem estas coisas à minha volta. Grama, pedras, uma mesa estranha com uma caixa que brilha… e um quadro vazio.",
+    "perceptions": [
+      { "object_id": "grass", "note": "Verde, pontiaguda, cheira a campo." },
+      { "object_id": "rock", "note": "Frio, pesado, talvez antigo." },
+      { "object_id": "pc_desk", "note": "Madeira e uma tela; parece lugar de perguntas." },
+      { "object_id": "cork_board", "note": "Superfície clara, pronta para marcas." }
+    ]
+  },
+  "derive": {
+    "monologue": "Se a grama cresce aqui e a pedra não, talvez o vento escolha onde plantas nascem… mas por quê?",
+    "needs_web_search": true,
+    "question": "Por que plantas crescem melhor perto de pedras na ilha?",
+    "hypotheses": [
+      { "id": "h1", "text": "Pedras retêm calor à noite" },
+      { "id": "h2", "text": "Pedras seguram água" }
+    ],
+    "nodes": [
+      { "id": "grass", "label": "grama" },
+      { "id": "rock", "label": "pedra" },
+      { "id": "h1", "label": "calor?" }
+    ],
+    "edges": [
+      { "from": "grass", "to": "rock", "label": "cresce perto" },
+      { "from": "h1", "to": "grass", "label": "hipótese" }
+    ]
+  },
+  "research": {
+    "monologue": "Então… microclimas. Pedra grande pode aquecer e molhar o solo ao redor. Fascinante para um coelho que não sabia disso ontem.",
+    "summary": "Microclimas: rochas mudam temperatura e umidade do solo ao redor, favorecendo algumas plantas.",
+    "nodes": [
+      { "id": "grass", "label": "grama" },
+      { "id": "rock", "label": "pedra" },
+      { "id": "micro", "label": "microclima" }
+    ],
+    "edges": [
+      { "from": "grass", "to": "rock", "label": "cresce perto" },
+      { "from": "rock", "to": "micro", "label": "causa?" },
+      { "from": "micro", "to": "grass", "label": "explica" }
+    ]
+  },
+  "sketch": {
+    "monologue": "Vou rabiscar: pedra, sol, gotas, grama feliz.",
+    "caption": "Pedra + sol = grama (?)"
+  }
+}
